@@ -14,6 +14,7 @@ int BPF_KPROBE(ptrace_attach,
 			   unsigned long flags)
 {
 	char current_comm[TASK_COMM];
+	pid_t pid;
 	long ret;
 
 	ret = bpf_get_current_comm(current_comm, TASK_COMM);
@@ -23,9 +24,11 @@ int BPF_KPROBE(ptrace_attach,
 		return 0;
 	}
 
-	bpf_printk("ptrace_attach: (comm: %s) -> (comm: %s)",
+	bpf_core_read(&pid, sizeof(pid_t), &task->pid);
+	bpf_printk("ptrace_attach: (comm: %s) -> (comm: %s, pid: %d)",
 			   current_comm,
-			   task->comm);
+			   task->comm,
+			   pid);
 
 	return 0;
 }
