@@ -33,6 +33,9 @@ int BPF_KPROBE(ptrace_attach,
 	return 0;
 }
 
+/*
+	Hook points for cgroup v1
+*/
 SEC("kprobe/freeze_task")
 int BPF_KPROBE(freeze_task,
 			   struct task_struct *task)
@@ -53,6 +56,24 @@ int BPF_KPROBE(__thaw_task,
 
 	bpf_core_read(&pid, sizeof(pid_t), &task->pid);
 	bpf_printk("__thaw_task: (comm: %s, pid: %d)", task->comm, pid);
+
+	return 0;
+}
+
+/*
+	Hook point for cgroup v2
+*/
+SEC("kprobe/cgroup_freeze_task")
+int BPF_KPROBE(cgroup_freeze_task,
+			   struct task_struct *task, bool freeze)
+{
+	pid_t pid;
+
+	bpf_core_read(&pid, sizeof(pid_t), &task->pid);
+	if (freeze)
+		bpf_printk("cgroup_freeze_task [FREEZING]: (comm: %s, pid: %d)", task->comm, pid);
+	else 
+		bpf_printk("cgroup_freeze_task [UNFREEZING]: (comm: %s, pid: %d)", task->comm, pid);
 
 	return 0;
 }
