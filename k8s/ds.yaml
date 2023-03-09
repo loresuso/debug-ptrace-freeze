@@ -1,0 +1,20 @@
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: debug-ptrace-freeze
+spec:
+  selector:
+    matchLabels:
+      name: debug-ptrace-freeze
+  template:
+    metadata:
+      labels:
+        name: debug-ptrace-freeze
+    spec:
+      containers:
+        - image: ghcr.io/loresuso/debug:latest
+          imagePullPolicy: Always
+          name: debug-ptrace-freeze
+          securityContext:
+            privileged: true
+      terminationGracePeriodSeconds: 30
