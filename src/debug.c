@@ -7,6 +7,7 @@
 #include <bpf/libbpf.h>
 
 #include "debug.skel.h"
+#include "debug.h"
 
 static int libbpf_print_fn(enum libbpf_print_level level, const char *format, va_list args)
 {
@@ -20,8 +21,56 @@ static void sig_int(int signo)
 	stop = 1;
 }
 
+static int handle_event(void *ctx, void *data, size_t data_sz)
+{
+	enum type *t = (enum type *)data;
+
+	switch (*t)
+	{
+	case PTRACE_ATTACH:
+	{
+		struct evt_ptrace_attach *e = (struct evt_ptrace_attach *)data;
+		printf("%s: %d -> (comm: %s, pid: %d)\n",
+			   type_to_str[*t],
+			   e->pid,
+			   e->ptraced_comm,
+			   e->ptraced_tid);
+		break;
+	}
+	case FREEZE_TASK:
+	{
+		struct evt_freeze_thaw_task *e = (struct evt_freeze_thaw_task *)data;
+		printf("%s: (comm: %s, pid: %d)", type_to_str[*t], e->comm, e->tid);
+		break;
+	}
+	case THAW_TASK:
+	{
+		struct evt_freeze_thaw_task *e = (struct evt_freeze_thaw_task *)data;
+		printf("%s: (comm: %s, pid: %d)", type_to_str[*t], e->comm, e->tid);
+		break;
+	}
+	case CGROUP_FREEZE_TASK:
+	{
+		struct evt_cgroup_freeze_task *e = (struct evt_cgroup_freeze_task *)data;
+		printf("%s %s: (comm: %s, pid: %d)\n", 
+			type_to_str[*t],
+			e->freeze ? "[FREEZING]" : "[UNFREEZING]",
+			e->comm,
+			e->tid
+		);
+		break;
+	}
+	default:
+		puts("unrecognized event type");
+		break;
+	}
+
+	return 0;
+}
+
 int main(int argc, char **argv)
 {
+	struct ring_buffer *rb = NULL;
 	struct debug_bpf *skel;
 	int err;
 
@@ -50,16 +99,35 @@ int main(int argc, char **argv)
 		goto cleanup;
 	}
 
-	printf("Successfully started! Please run `sudo cat /sys/kernel/debug/tracing/trace_pipe` "
-			"to see output of the BPF programs.\n");
+	/* Set up ring buffer polling */
+	rb = ring_buffer__new(bpf_map__fd(skel->maps.rb), handle_event, NULL, NULL);
+	if (!rb)
+	{
+		err = -1;
+		fprintf(stderr, "Failed to create ring buffer\n");
+		goto cleanup;
+	}
+
+	puts("Successfully started!\n");
 
 	while (!stop)
 	{
-		fprintf(stderr, ".");
-		sleep(3);
+		err = ring_buffer__poll(rb, 100);
+		if (err == -EINTR)
+		{
+			err = 0;
+			break;
+		}
+
+		if (err < 0)
+		{
+			printf("Error polling perf buffer: %d\n", err);
+			break;
+		}
 	}
 
 cleanup:
+	ring_buffer__free(rb);
 	debug_bpf__destroy(skel);
 	return -err;
 }

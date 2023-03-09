@@ -3,8 +3,13 @@
 #include <bpf/bpf_helpers.h>
 #include <bpf/bpf_tracing.h>
 #include "printk.bpf.h"
+#include "debug.h"
 
-#define TASK_COMM 16
+struct {
+	__uint(type, BPF_MAP_TYPE_RINGBUF);
+	__uint(max_entries, 256 * 1024);
+} rb SEC(".maps");
+
 
 SEC("kprobe/ptrace_attach")
 int BPF_KPROBE(ptrace_attach,
@@ -13,22 +18,24 @@ int BPF_KPROBE(ptrace_attach,
 			   unsigned long addr,
 			   unsigned long flags)
 {
-	char current_comm[TASK_COMM];
-	pid_t pid;
+	struct evt_ptrace_attach *e;
+	int pid;
 	long ret;
 
-	ret = bpf_get_current_comm(current_comm, TASK_COMM);
-	if (ret)
+	e = bpf_ringbuf_reserve(&rb, sizeof(*e), 0);
+	if (!e)
 	{
-		bpf_printk("can't get current comm");
+		bpf_printk("can't reserve space in ring buffer");
 		return 0;
 	}
 
-	bpf_core_read(&pid, sizeof(pid_t), &task->pid);
-	bpf_printk("ptrace_attach: (comm: %s) -> (comm: %s, pid: %d)",
-			   current_comm,
-			   task->comm,
-			   pid);
+	e->t = PTRACE_ATTACH;
+
+	e->pid = bpf_get_current_pid_tgid() >> 32;
+	bpf_core_read(&e->ptraced_tid, sizeof(pid_t), &task->pid);
+	bpf_core_read_str(&e->ptraced_comm, TASK_COMM, &task->comm);
+
+	bpf_ringbuf_submit(e, 0);
 
 	return 0;
 }
@@ -40,10 +47,24 @@ SEC("kprobe/freeze_task")
 int BPF_KPROBE(freeze_task,
 			   struct task_struct *task)
 {
-	pid_t pid;
+	struct evt_freeze_thaw_task *e;
+	long ret;
 
-	bpf_core_read(&pid, sizeof(pid_t), &task->pid);
-	bpf_printk("freeze_task: (comm: %s, pid: %d)", task->comm, pid);
+	e = bpf_ringbuf_reserve(&rb, sizeof(*e), 0);
+	if (!e)
+	{
+		bpf_printk("can't reserve space in ring buffer");
+		return 0;
+	}
+
+	e->t = FREEZE_TASK;
+
+	bpf_core_read(&e->tid, sizeof(pid_t), &task->pid);
+	bpf_core_read_str(&e->comm, TASK_COMM, &task->comm);
+
+	bpf_ringbuf_submit(e, 0);
+	
+	//bpf_printk("freeze_task: (comm: %s, pid: %d)", task->comm, pid);
 
 	return 0;
 }
@@ -52,10 +73,24 @@ SEC("kprobe/__thaw_task")
 int BPF_KPROBE(__thaw_task,
 			   struct task_struct *task)
 {
-	pid_t pid;
+	struct evt_freeze_thaw_task *e;
+	long ret;
 
-	bpf_core_read(&pid, sizeof(pid_t), &task->pid);
-	bpf_printk("__thaw_task: (comm: %s, pid: %d)", task->comm, pid);
+	e = bpf_ringbuf_reserve(&rb, sizeof(*e), 0);
+	if (!e)
+	{
+		bpf_printk("can't reserve space in ring buffer");
+		return 0;
+	}
+
+	e->t = THAW_TASK;
+
+	bpf_core_read(&e->tid, sizeof(pid_t), &task->pid);
+	bpf_core_read_str(&e->comm, TASK_COMM, &task->comm);
+
+	bpf_ringbuf_submit(e, 0);
+	
+	
 
 	return 0;
 }
@@ -67,13 +102,23 @@ SEC("kprobe/cgroup_freeze_task")
 int BPF_KPROBE(cgroup_freeze_task,
 			   struct task_struct *task, bool freeze)
 {
-	pid_t pid;
+	struct evt_cgroup_freeze_task *e;
+	long ret;
 
-	bpf_core_read(&pid, sizeof(pid_t), &task->pid);
-	if (freeze)
-		bpf_printk("cgroup_freeze_task [FREEZING]: (comm: %s, pid: %d)", task->comm, pid);
-	else 
-		bpf_printk("cgroup_freeze_task [UNFREEZING]: (comm: %s, pid: %d)", task->comm, pid);
+	e = bpf_ringbuf_reserve(&rb, sizeof(*e), 0);
+	if (!e)
+	{
+		bpf_printk("can't reserve space in ring buffer");
+		return 0;
+	}
+
+	e->t = CGROUP_FREEZE_TASK;
+
+	bpf_core_read(&e->tid, sizeof(pid_t), &task->pid);
+	e->freeze = freeze;
+	bpf_core_read_str(&e->comm, TASK_COMM, &task->comm);
+
+	bpf_ringbuf_submit(e, 0);
 
 	return 0;
 }
