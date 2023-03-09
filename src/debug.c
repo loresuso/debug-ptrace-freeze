@@ -40,13 +40,13 @@ static int handle_event(void *ctx, void *data, size_t data_sz)
 	case FREEZE_TASK:
 	{
 		struct evt_freeze_thaw_task *e = (struct evt_freeze_thaw_task *)data;
-		printf("%s: (comm: %s, pid: %d)", type_to_str[*t], e->comm, e->tid);
+		printf("%s: %s -> (comm: %s, pid: %d)\n", type_to_str[*t], e->current, e->comm, e->tid);
 		break;
 	}
 	case THAW_TASK:
 	{
 		struct evt_freeze_thaw_task *e = (struct evt_freeze_thaw_task *)data;
-		printf("%s: (comm: %s, pid: %d)", type_to_str[*t], e->comm, e->tid);
+		printf("%s: %s -> (comm: %s, pid: %d)\n", type_to_str[*t], e->current, e->comm, e->tid);
 		break;
 	}
 	case CGROUP_FREEZE_TASK:

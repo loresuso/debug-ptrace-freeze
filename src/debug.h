@@ -28,6 +28,7 @@ struct evt_ptrace_attach
 struct evt_freeze_thaw_task
 {
 	enum type t;
+	char current[TASK_COMM];
 	char comm[TASK_COMM];
 	int tid;
 };

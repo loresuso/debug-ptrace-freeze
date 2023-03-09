@@ -5,11 +5,11 @@
 #include "printk.bpf.h"
 #include "debug.h"
 
-struct {
+struct
+{
 	__uint(type, BPF_MAP_TYPE_RINGBUF);
 	__uint(max_entries, 256 * 1024);
 } rb SEC(".maps");
-
 
 SEC("kprobe/ptrace_attach")
 int BPF_KPROBE(ptrace_attach,
@@ -59,12 +59,13 @@ int BPF_KPROBE(freeze_task,
 
 	e->t = FREEZE_TASK;
 
+	bpf_get_current_comm(&e->current, TASK_COMM);
 	bpf_core_read(&e->tid, sizeof(pid_t), &task->pid);
 	bpf_core_read_str(&e->comm, TASK_COMM, &task->comm);
 
 	bpf_ringbuf_submit(e, 0);
-	
-	//bpf_printk("freeze_task: (comm: %s, pid: %d)", task->comm, pid);
+
+	// bpf_printk("freeze_task: (comm: %s, pid: %d)", task->comm, pid);
 
 	return 0;
 }
@@ -85,12 +86,11 @@ int BPF_KPROBE(__thaw_task,
 
 	e->t = THAW_TASK;
 
+	bpf_get_current_comm(&e->current, TASK_COMM);
 	bpf_core_read(&e->tid, sizeof(pid_t), &task->pid);
 	bpf_core_read_str(&e->comm, TASK_COMM, &task->comm);
 
 	bpf_ringbuf_submit(e, 0);
-	
-	
 
 	return 0;
 }
