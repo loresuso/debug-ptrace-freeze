@@ -5,6 +5,7 @@
 #include <errno.h>
 #include <sys/resource.h>
 #include <bpf/libbpf.h>
+#include <time.h>
 
 #include "debug.skel.h"
 #include "debug.h"
@@ -24,6 +25,16 @@ static void sig_int(int signo)
 static int handle_event(void *ctx, void *data, size_t data_sz)
 {
 	enum type *t = (enum type *)data;
+
+	time_t timer;
+    char buffer[26];
+    struct tm* tm_info;
+
+    timer = time(NULL);
+    tm_info = localtime(&timer);
+
+    strftime(buffer, 26, "%Y-%m-%d %H:%M:%S ", tm_info);
+    printf("%s", buffer);
 
 	switch (*t)
 	{

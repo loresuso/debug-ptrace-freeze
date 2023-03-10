@@ -1,6 +1,7 @@
 #!/bin/sh
+cp $(which sleep) . 
 while true
 do
 echo "..."
-./sleep 5
+./sleep 60
 done
